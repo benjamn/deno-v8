@@ -206,11 +206,30 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     RunAllPromiseHooks(PromiseHookType::kBefore, microtask_context,
                    CAST(promise_to_resolve));
 
+    TNode<Object> preserved_embedder_data = LoadObjectField(
+        microtask,
+        PromiseResolveThenableJobTask::kContinuationPreservedEmbedderDataOffset);
+    Label preserved_data_done(this);
+    GotoIf(IsUndefined(preserved_embedder_data), &preserved_data_done);
+    StoreContextElement(native_context,
+                        Context::CONTINUATION_PRESERVED_EMBEDDER_DATA_INDEX,
+                        preserved_embedder_data);
+    Goto(&preserved_data_done);
+    BIND(&preserved_data_done);
+
     {
       ScopedExceptionHandler handler(this, &if_exception, &var_exception);
       CallBuiltin(Builtin::kPromiseResolveThenableJob, native_context,
                   promise_to_resolve, thenable, then);
     }
+
+    Label preserved_data_reset_done(this);
+    GotoIf(IsUndefined(preserved_embedder_data), &preserved_data_reset_done);
+    StoreContextElement(native_context,
+                        Context::CONTINUATION_PRESERVED_EMBEDDER_DATA_INDEX,
+                        UndefinedConstant());
+    Goto(&preserved_data_reset_done);
+    BIND(&preserved_data_reset_done);
 
     RunAllPromiseHooks(PromiseHookType::kAfter, microtask_context,
                    CAST(promise_to_resolve));
